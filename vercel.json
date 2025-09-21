@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
+    }
+  ],
+  "env": {
+    "TARGET_URL": "@target_url",
+    "ENABLE_CACHE": "@enable_cache",
+    "CACHE_TTL": "@cache_ttl",
+    "DEBUG": "@debug"
+  }
+}
