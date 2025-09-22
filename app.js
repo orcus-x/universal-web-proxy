@@ -5,14 +5,13 @@ const cors = require('cors');
 require('dotenv').config();
 
 // Load proxy handler
+// Load proxy handler with fallback
 let ProxyHandler;
 try {
   ProxyHandler = require('./lib/ultra-proxy-handler');
-  console.log('Using Ultra Proxy Handler (Undici + Got + HTTP/2)');
 } catch (e) {
   // Fallback to basic handler if ultra handler fails
   ProxyHandler = require('./lib/proxy-handler');
-  console.log('Using Basic Proxy Handler (fallback)');
 }
 
 const app = express();
@@ -39,9 +38,31 @@ const proxyHandler = new ProxyHandler(TARGET_URL, PROXY_HOST);
 app.use(compression());
 app.use(cors());
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.raw({ type: '*/*', limit: '50mb' }));
+
+// Body parsing middleware with better error handling
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf, encoding) => {
+    // Store raw body for fallback
+    req.rawBody = buf.toString(encoding || 'utf8');
+  },
+  strict: false // Allow parsing of non-object JSON values
+}));
+
+app.use(express.urlencoded({
+  extended: true,
+  limit: '10mb'
+}));
+
+app.use(express.raw({
+  type: (req) => {
+    // Only use raw parser if not JSON or URL encoded
+    const contentType = req.headers['content-type'] || '';
+    return !contentType.includes('application/json') &&
+           !contentType.includes('application/x-www-form-urlencoded');
+  },
+  limit: '50mb'
+}));
 
 // Health check endpoint
 app.get('/_health', (req, res) => {
@@ -64,9 +85,23 @@ app.all('*', async (req, res) => {
   await proxyHandler.handleRequest(req, res);
 });
 
-// Error handling
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  // Handle JSON parsing errors gracefully
+  if (err.type === 'entity.parse.failed') {
+    // Use raw body if available
+    if (req.rawBody !== undefined) {
+      req.body = req.rawBody;
+      return next();
+    }
+    // Return error for invalid JSON
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+
+  // Log other errors
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('Server error:', err);
+  }
   res.status(500).send('Internal server error');
 });
 

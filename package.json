@@ -4,8 +4,8 @@
   "description": "Universal web proxy server for local and Vercel deployment",
   "main": "index.js",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
+    "dev": "node app.js",
+    "start": "node app.js",
     "vercel-build": "echo 'No build needed'"
   },
   "dependencies": {
